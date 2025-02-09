@@ -1,149 +1,101 @@
-# Intrusion detection in real time Network Log Data (ELK as SIEM)
 
-## Prerequisites:
+# Intrusion Detection in Real-Time Network Log Data Using ELK Stack
 
-To run this lab you will need both the docker engine and docker compose installed. If you can run "docker -v" and "docker-compose -v" and get a version number back, you should be good to go. If you see errors when you run the docker-compose file, you may just need to reboot.
+## Overview
+This project demonstrates the process of analyzing firewall log data for intrusion detection using the ELK (Elasticsearch, Logstash, and Kibana) stack. The primary goal is to monitor, visualize, and gain actionable insights from network logs in real time. The data used in this project is sourced from a low-interaction honeypot environment designed to capture potential intrusion attempts.
 
-## Starting up the Elastic Stack
+### Why Use ELK for Intrusion Detection?
+- **Centralized Monitoring**: ELK provides a robust platform for aggregating, indexing, and querying log data.
+- **Real-Time Insights**: Visual dashboards allow immediate detection of suspicious activities.
+- **Scalability**: ELK can handle large volumes of log data, making it suitable for enterprise environments.
 
-To bring up Elasticsearch, Kibana, and Cerebro (a 3rd party management framework for the Elastic stack) navigate to the folder where you have cloned this respository. At the command line type
+### Project Impact
+- **Enhanced Security**: Enables proactive monitoring of network activity to detect malicious attempts.
+- **Automation**: Streamlines the process of log analysis and reporting.
+- **Insights**: Identifies patterns in network traffic, helping organizations strengthen their defenses.
 
-`docker-compose up`
+---
 
-and press enter. You should see a bunch of text scrolling as the the containers start up. After 30 seconds or so you should be able to access Kibana at http://localhost:5601 as well as the Cerebro management tool at http://localhost:9000. To connect Cerebro to the running Elasticsearch container type 
+## Data Description
+The data consists of firewall logs recorded from a virtual private server (VPS) on DigitalOcean. The logs cover the timeframe from February 12, 2019, to February 18, 2019. These logs include:
+- **Source IP**: IP addresses originating traffic.
+- **Destination Port**: Targeted ports.
+- **Protocols**: Network protocols used.
+- **Actions**: Recorded actions such as allowing or blocking requests.
 
-`http://elasticsearch:9200` 
+### Goals:
+1. Identify top attacking IP addresses.
+2. Analyze traffic by protocol and ports.
+3. Visualize geographic sources of traffic.
+4. Detect patterns that could indicate port scans or brute force attacks.
 
-in the Node address box on the main page, then press the Connect button. You should see a dashboard showing a single row with your running Elasticsearch node.
+---
 
-To shut down services, press control+C on the window where docker-compose was started. You can also type `docker-compose stop` from inside the repo folder in another terminal. To remove all the containers type `docker rm elasticsearch kibana cerebro` once the services are stopped.
+## Procedure
 
-Note: This docker compose file will write all data into folders in the /tmp directory on your machine so that if you bring the containers down and back up, the data will still be there. If you wish to save the data somewhere else, edit the docker-compose.yml file under the volumes section of the elasticsearch service. You must choose a location where docker will have permissions to write.
+### **Step 1: Setting Up the ELK Stack**
+- **Tools Used**:
+  - Elasticsearch (for data storage and querying).
+  - Kibana (for visualization and dashboards).
+- **Steps**:
+  1. Start the ELK stack using `docker-compose`.
+  2. Verify services are running:
+     - Elasticsearch: [http://localhost:9200](http://localhost:9200)
+     - Kibana: [http://localhost:5601](http://localhost:5601)
 
-## Data Import
+### **Step 2: Importing Log Data**
+1. Access Kibana and navigate to the **Discover** tab.
+2. Use the "Data Visualizer" to upload the log file (`ufw.log`).
+3. Apply Grok patterns to parse log fields (e.g., `source_ip`, `protocol`, `destination_port`).
+4. Create the `ufw_logs` index pattern in Kibana and set `@timestamp` as the time field.
 
-For this demonstration we will use a firewall log that was recorded from a VPS located on digital ocean. The data is present for the timeframe of roughly 2019-02-12 to 2019-02-18. To keep attackers interested, low-interaction honeypot services were set up for multiple ports. Traffic to port 2222 should be ignored as the honeypot was administered through that port. Also note that outbound traffic from the honeypot itself is present in the data, if you do want to filter outbound traffic remove `source_ip:104.248.50.195` from your searches and visualizations.
+### **Step 3: Creating Visualizations**
+1. Import the provided `dashboard.json` file through **Management > Saved Objects**.
+2. Associate visualizations with the `ufw_logs` index pattern.
+3. Open the `[Shell] UFW` dashboard to visualize the data.
 
-### To import the ufw.log data into Kibana follow these steps:
+### **Step 4: Adjusting Time Range**
+1. Set the time range in Kibana to match the dataset (Feb 12, 2019 - Feb 18, 2019).
+2. Refresh the dashboard to view data in real time.
 
-1. Go to Kibana in your virtual machine by opening a browser and going to http://localhost:5601. Select the machine learning plugin on the left side of Kibana, then select the Data Visualizer tab at the top of the screen.
-2. Click the button to "Select or drag and drop a file" and pick the ufw.log filefrom the repo. If you see an error at this stage just try it again, there seems to be a potential bug with the 7.0.0beta1 of Elasticsearch that may cause it to error out if analysis takes too long.
-3. After "Analyzing data" the next screen will show some information, but it does not fully detect the fields correctly, so we must fix it. Select the "Override settings" button in the Summary section and in the Grok pattern window clear out what is there and paste the below statement, then press Apply. Paste the following in the grok pattern window:
+### **Step 5: Visualization Insights**
+Key visualizations include:
+- **Top Attacking IPs**
+- **Traffic by Country and Ports**
+- **Heatmap of Source IPs**
+- **Area Chart of Top 10 IPs by Percentage**
 
-```%{SYSLOGBASE} \[%{DATA}\] \[%{DATA:action}\] IN=(%{WORD:in})? OUT=(%{WORD:out})?( MAC=%{DATA:mac})? SRC=%{IP:source_ip} DST=%{IP:destination_ip} %{DATA} PROTO=%{WORD:protocol}( SPT=%{INT:source_port} DPT=%{INT:destination_port})?```
+---
 
-4. Kibana will now re-analyze the data with the fields parsed correctly. You should now see the file stats display with data parsed out cleanly. Hit the blue import button in the lower left of the screen to go to the next page.
-5. In the Import data section on the next page, select the Advanced tab.
-6. Type the name `ufw_logs` in the "Index name" field, ensuring the "Create index pattern" box is checked. This will be the name of the index the data is imported into.
-7. You will need to replace the contents of the **Mappings** and **Ingest pipeline** window in its entirety with the code below. The Index settings window can be left as-is. (This code is only making 3 small adjustments from the default. In the ingest section we are adding "processors" to resolve the geoIP location and ASN from the data in the source_ip field, and in the mappings where are defining a geoip object with a nested field called location of type "geo_point" where the resolved geoIP location data can be stored.)
+## Visual Outputs
+The following images showcase the visualizations:
 
-Place the following in the **mappings** window:
+### Dashboard Overview
+![Dashboard](./images/dashboard.png)
 
-```
-{
-"@timestamp": {
-  "type": "date"
-},
-"action": {
-  "type": "keyword"
-},
-"destination_ip": {
-  "type": "ip"
-},
-"destination_port": {
-  "type": "long"
-},
-"in": {
-  "type": "keyword"
-},
-"geoip": {
-      "properties": {
-        "location": { "type": "geo_point" }
-      }
-},
-"length": {
-  "type": "long"
-},
-"logsource": {
-  "type": "keyword"
-},
-"mac": {
-  "type": "keyword"
-},
-"message": {
-  "type": "text"
-},
-"out": {
-  "type": "keyword"
-},
-"program": {
-  "type": "keyword"
-},
-"protocol": {
-  "type": "keyword"
-},
-"source_ip": {
-  "type": "ip"
-},
-"source_port": {
-  "type": "long"
-}
-}
-```
+### Detailed View of Visualizations
+![Dashboard Part 2](./images/dashboard2.png)
+![Dashboard Part 3](./images/dashboard3.png)
 
+### Discover Tab
+![Discover View](./images/discover.png)
 
-Place the following in the ingest pipeline window:
-```
-{
-"description": "Ingest pipeline created by file structure finder",
-"processors": [
-  {
-    "grok": {
-      "field": "message",
-      "patterns": [
-        "%{SYSLOGBASE} \\[%{DATA}\\] \\[%{DATA:action}\\] IN=(%{WORD:in})? OUT=(%{WORD:out})?
-        ( MAC=%{DATA:mac})?SRC=%{IP:source_ip} DST=%{IP:destination_ip} LEN=%{INT:length}
-        %{DATA} PROTO=%{WORD:protocol}( SPT=%{INT:source_port} DPT=%{INT:destination_port})?"
-      ]
-    }
-  },
-  {
-    "date": {
-      "field": "timestamp",
-      "timezone": "UTC",
-      "formats": [
-        "MMM dd HH:mm:ss",
-        "MMM  d HH:mm:ss"
-      ]
-    }
-  },
-  {
-    "remove": {
-      "field": "timestamp"
-    }
-  },
-  {
-    "geoip": {
-      "field" : "source_ip"
-    }
-  },
-  {
-    "geoip": {
-      "field" : "source_ip",
-      "database_file": "GeoLite2-ASN.mmdb"
-    }
-  }
-]
-}
-```
+---
 
-8. Once this is complete, click the blue **import** button and your data should be cleanly ingested. You will be able to view it by going to the Discover tab and selecting the name of the index (ufw_logs) you chose in the previous steps. You also need to select the correct timeframe in the time picker at the upper right of the window in the Discover tab. Select Feb 12th, 2019 to Feb 18th, 2019 inclusive, and the data should show up on the page once you hit the Refresh button.
-9. To import the premade visualizations and dashboards, use the `dashboard.json` file included with this repo. Click on 
-the management tab on the left side of Kibana, then choose **Saved Objects**. On the next screen click the import button then choose the text file you saved the JSON as to import it. *(You may receive a warning message in a yellow box saying "The following saved objects use index patterns that do not exist. Please select the index patterns you'd like 
-re-associated with them. You can create a new index pattern if necessary." Use the drop-down under **new index pattern**
-to select the`ufw_logs` index and hit **confirm all changes**.)*
+## Conclusion
+This project demonstrates the power of the ELK stack for network monitoring and intrusion detection. By leveraging Elasticsearch for indexing, Kibana for visualization, and Grok patterns for parsing, we effectively analyze network logs in real time. This approach enhances situational awareness and empowers organizations to proactively defend against cyber threats.
 
-The data, visualizations, and dashboards should be imported with the prefix [Shell] and you can access them through the related tabs on the left side of the screen.
+---
 
+## How to Run
+1. Clone this repository.
+2. Start the ELK stack using `docker-compose`:
+   ```bash
+   docker-compose up
+   ```
+3. Import the data into Elasticsearch via Kibana.
+4. Navigate to the `[Shell] UFW` dashboard in Kibana to view visualizations.
 
+---
 
+Feel free to reach out for questions or feedback!
